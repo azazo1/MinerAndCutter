@@ -1,0 +1,4 @@
+name: MinerAndCutter
+version: '${project.version}'
+main: com.azazo1.minerandcutter.MinerAndCutter
+api-version: '1.20'
