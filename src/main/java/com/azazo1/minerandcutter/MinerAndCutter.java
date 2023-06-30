@@ -2,9 +2,9 @@ package com.azazo1.minerandcutter;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -17,6 +17,8 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 
 public final class MinerAndCutter extends JavaPlugin implements Listener {
@@ -56,21 +58,21 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
         add(Material.MANGROVE_LOG);
         add(Material.CHERRY_LOG);
     }};
-    public static final HashSet<Material> pickaxeTypes = new HashSet<>() {{
-        add(Material.WOODEN_PICKAXE);
-        add(Material.STONE_PICKAXE);
-        add(Material.IRON_PICKAXE);
-        add(Material.DIAMOND_PICKAXE);
-        add(Material.GOLDEN_PICKAXE);
-        add(Material.NETHERITE_PICKAXE);
+    public static final HashMap<Material, Integer> pickaxeTypes = new HashMap<>() {{ // 镐子和最大耐久
+        put(Material.WOODEN_PICKAXE, 59);
+        put(Material.STONE_PICKAXE, 131);
+        put(Material.IRON_PICKAXE, 250);
+        put(Material.DIAMOND_PICKAXE, 1561);
+        put(Material.GOLDEN_PICKAXE, 32);
+        put(Material.NETHERITE_PICKAXE, 2031);
     }};
-    public static final HashSet<Material> axeTypes = new HashSet<>() {{
-        add(Material.WOODEN_AXE);
-        add(Material.STONE_AXE);
-        add(Material.IRON_AXE);
-        add(Material.DIAMOND_AXE);
-        add(Material.GOLDEN_AXE);
-        add(Material.NETHERITE_AXE);
+    public static final HashMap<Material, Integer> axeTypes = new HashMap<>() {{ // 斧头和最大耐久
+        put(Material.WOODEN_AXE, 59);
+        put(Material.STONE_AXE, 131);
+        put(Material.IRON_AXE, 250);
+        put(Material.DIAMOND_AXE, 1561);
+        put(Material.GOLDEN_AXE, 32);
+        put(Material.NETHERITE_AXE, 2031);
     }};
 
     @EventHandler
@@ -83,16 +85,18 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
                 return;
             }
             Material type = clickedBlock.getType();
-
+            Material handItem = player.getInventory().getItemInMainHand().getType();
             if (isInMind(type)) {
-                if (isInPickaxe(player.getInventory().getItemInMainHand().getType()) && doubleClickCheckerOfMiner.checkDoubleClick(player)) { // 要在内层 确保玩家拿着镐子双击且双击的是对应方块
+                if (isInPickaxe(handItem) && doubleClickCheckerOfMiner.checkDoubleClick(player)) { // 要在内层 确保玩家拿着镐子双击且双击的是对应方块
                     // 挖矿
-                    digBlocksInOneTime(clickedBlock, player);
+                    event.setCancelled(true);
+                    digBlocksInOneTime(clickedBlock, player, pickaxeTypes.get(handItem));
                 }
             } else if (isInTree(type)) {
-                if (isInAxe(player.getInventory().getItemInMainHand().getType()) && doubleClickCheckerOfTree.checkDoubleClick(player)) {
+                if (isInAxe(handItem) && doubleClickCheckerOfTree.checkDoubleClick(player)) {
                     // 挖树
-                    digBlocksInOneTime(clickedBlock, player);
+                    event.setCancelled(true);
+                    digBlocksInOneTime(clickedBlock, player, axeTypes.get(handItem));
                 }
             }
         }
@@ -102,20 +106,39 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
     /**
      * 连锁采集某种方块
      *
-     * @param targetBlock 要被采集的起始方块, 连锁采集与之相邻的方块
-     * @param player      采集的玩家, 采集后的物品将直接送至该玩家处
+     * @param targetBlock  要被采集的起始方块, 连锁采集与之相邻的方块
+     * @param player       采集的玩家, 采集后的物品将直接送至该玩家处
+     * @param maxEndurance 玩家手上采集工具的最大耐久
      */
-    private void digBlocksInOneTime(@NotNull Block targetBlock, @NotNull Player player) {
+    private void digBlocksInOneTime(@NotNull Block targetBlock, @NotNull Player player, int maxEndurance) {
         ItemStack is = player.getInventory().getItemInMainHand();
+        // 检查该工具是否能挖掘该类方块
+        Collection<ItemStack> drops = targetBlock.getDrops(is);
+        if (drops.size() == 0) {
+            player.sendMessage(Component.text("你的工具等级不足以挖掘该矿物!"));
+            return;
+        }
         ArrayList<Block> blocks = searchBlocks(targetBlock, null); // 搜寻相邻同类方块
         // 检查工具耐久值是否足够
-        int damage = ((Damageable) is.getItemMeta()).getDamage();
+        Damageable itemMeta = (Damageable) is.getItemMeta();
+        int damage = itemMeta.getDamage();
+        int endurance = maxEndurance - damage;
         int size = blocks.size();
-        if (damage < size) {
-            player.sendMessage(Component.text("你所持的工具耐久不足! (需要: %d, 你的工具: %d)".formatted(size, damage)));
+        if (endurance < size) {
+            player.sendMessage(Component.text("你所持的工具耐久不足! (需要: %d, 你的工具: %d)".formatted(size, endurance)));
         } else {
-            targetBlock.breakNaturally(is);
-            player.sendMessage(Component.text("挖掘了 %d 个方块, 工具剩余耐久: %d".formatted(size, damage)));
+            for (Block discoveredBlock : blocks) {
+                discoveredBlock.breakNaturally(is);
+                Collection<Item> dropItems = player.getWorld().getNearbyEntitiesByType(Item.class, discoveredBlock.getLocation(), 2);
+                dropItems.forEach(item -> {
+                    item.teleport(player);
+                    item.setPickupDelay(0);
+                });
+            }
+            damage += size;
+            itemMeta.setDamage(damage);
+            is.setItemMeta(itemMeta);
+            player.sendMessage(Component.text("挖掘了 %d 个方块, 工具剩余耐久: %d".formatted(size, maxEndurance - damage)));
         }
     }
 
@@ -129,23 +152,15 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
             return discoveredBlocks; // 终止搜索
         }
         discoveredBlocks.add(targetBlock);
-        Location loc = targetBlock.getLocation();
-        Location locX = loc.clone();
-        locX.setX(loc.getX() + 1);
-        Location locNX = loc.clone();
-        locNX.setX(loc.getX() - 1);
-        Location locY = loc.clone();
-        locY.setY(loc.getY() + 1);
-        Location locNY = loc.clone();
-        locNY.setY(loc.getY() - 1);
-        Location locZ = loc.clone();
-        locZ.setZ(loc.getZ() + 1);
-        Location locNZ = loc.clone();
-        locNZ.setZ(loc.getZ() - 1);
-        for (Location _loc : new Location[]{locX, locNX, locY, locNY, locZ, locNZ}) {
-            if (_loc.getBlock().getType().equals(targetBlock.getType())) {
-                searchBlocks(targetBlock, discoveredBlocks);
-                getLogger().info("discover block: %.1f, %.1f, %.1f".formatted(_loc.getX(), _loc.getY(), _loc.getZ()));
+        Block blockX = targetBlock.getRelative(1, 0, 0);
+        Block blockNX = targetBlock.getRelative(-1, 0, 0);
+        Block blockZ = targetBlock.getRelative(0, 0, 1);
+        Block blockNZ = targetBlock.getRelative(0, 0, -1);
+        Block blockY = targetBlock.getRelative(0, 1, 0);
+        Block blockNY = targetBlock.getRelative(0, -1, 0);
+        for (Block relativeBlock : new Block[]{blockX, blockNX, blockZ, blockNZ, blockY, blockNY}) {
+            if (relativeBlock.getType() == targetBlock.getType()) {
+                searchBlocks(relativeBlock, discoveredBlocks);
             }
         }
         return discoveredBlocks;
@@ -162,7 +177,7 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
      * 查询某个物品是否是镐子
      */
     private boolean isInPickaxe(Material material) {
-        return pickaxeTypes.contains(material);
+        return pickaxeTypes.containsKey(material);
     }
 
 
@@ -177,7 +192,7 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
      * 查询某个物品是否是斧头
      */
     private boolean isInAxe(Material material) {
-        return axeTypes.contains(material);
+        return axeTypes.containsKey(material);
     }
 
     @Override

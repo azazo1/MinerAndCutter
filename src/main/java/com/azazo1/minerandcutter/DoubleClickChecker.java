@@ -12,7 +12,7 @@ public class DoubleClickChecker {
     public final MinerAndCutter plugin;
     protected HashMap<Player, Long> lastClickTime = new HashMap<>();
 
-    public static final int DOUBLE_CLICK_MAX_INTERVAL_TICK = 3;
+    public static final int DOUBLE_CLICK_MAX_INTERVAL_TICK = 15;
 
     public DoubleClickChecker(MinerAndCutter plugin) {
         this.plugin = plugin;
