@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d06a637b-2259-45cd-b261-383a49eb1653" name="Changes" comment="initial2">
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/azazo1/minerandcutter/Pair.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/aws.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/aws.xml" afterDir="false" />
+    <list default="true" id="d06a637b-2259-45cd-b261-383a49eb1653" name="Changes" comment="树木的搜索用广度优先替代了深度优先，速度更快&#10;现在支持物品栏内多种同类型同等级工具叠加耐久来进行挖掘&#10;在树木搜索上做了一个搜索广度的限制">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/azazo1/minerandcutter/MinerAndCutter.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/azazo1/minerandcutter/MinerAndCutter.java" afterDir="false" />
     </list>
@@ -129,7 +127,14 @@
       <option name="project" value="LOCAL" />
       <updated>1688091193468</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="树木的搜索用广度优先替代了深度优先，速度更快&#10;现在支持物品栏内多种同类型同等级工具叠加耐久来进行挖掘&#10;在树木搜索上做了一个搜索广度的限制">
+      <created>1688396883002</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1688396883002</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -146,6 +151,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="initial" />
     <MESSAGE value="initial2" />
-    <option name="LAST_COMMIT_MESSAGE" value="initial2" />
+    <MESSAGE value="树木的搜索用广度优先替代了深度优先，速度更快&#10;现在支持物品栏内多种同类型同等级工具叠加耐久来进行挖掘&#10;在树木搜索上做了一个搜索广度的限制" />
+    <option name="LAST_COMMIT_MESSAGE" value="树木的搜索用广度优先替代了深度优先，速度更快&#10;现在支持物品栏内多种同类型同等级工具叠加耐久来进行挖掘&#10;在树木搜索上做了一个搜索广度的限制" />
   </component>
 </project>

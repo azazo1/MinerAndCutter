@@ -83,7 +83,6 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
         add(Material.CHERRY_LEAVES);
         add(Material.FLOWERING_AZALEA_LEAVES);
     }};
-    private static final int MAX_SEARCH_DEPTH = 50; // 搜索“树木”时最大搜索广度（矿物一般较为少，可不理）
 
     @EventHandler
     public void onPlayerInteract(@NotNull PlayerInteractEvent event) {
@@ -229,38 +228,35 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
         HashSet<Block> discoveredBlocks = new HashSet<>();// 初始化结果列表
         HashSet<Block> searchedLeaves = new HashSet<>();
 
-        LinkedList<Pair<Block, Integer>> blocks = new LinkedList<>() {{
-            add(new Pair<>(targetBlock.getRelative(1, 0, 0), 1)); // Pair.b 指的是 搜索深度
-            add(new Pair<>(targetBlock.getRelative(-1, 0, 0), 1));
-            add(new Pair<>(targetBlock.getRelative(0, 0, 1), 1));
-            add(new Pair<>(targetBlock.getRelative(0, 0, -1), 1));
-            add(new Pair<>(targetBlock.getRelative(0, 1, 0), 1));
-            add(new Pair<>(targetBlock.getRelative(0, -1, 0), 1));
+        LinkedList<Block> blocks = new LinkedList<>() {{
+            add(targetBlock.getRelative(1, 0, 0));
+            add(targetBlock.getRelative(-1, 0, 0));
+            add(targetBlock.getRelative(0, 0, 1));
+            add(targetBlock.getRelative(0, 0, -1));
+            add(targetBlock.getRelative(0, 1, 0));
+            add(targetBlock.getRelative(0, -1, 0));
         }};
 
         discoveredBlocks.add(targetBlock);
 
         while (blocks.size() > 0) {
-            Pair<Block, Integer> selected = blocks.pop();
-            if (selected.a.getType() == targetBlock.getType() // 与 结果 中的方块类型相同，即判断是否是树木方块
-                    || isInLeaf(selected.a.getType())) { // 树叶也要搜索
-                if (discoveredBlocks.contains(selected.a) || searchedLeaves.contains(selected.a)) { // 已经搜索过
+            Block selected = blocks.pop();
+            if (selected.getType() == targetBlock.getType() // 与 结果 中的方块类型相同，即判断是否是树木方块
+                    || isInLeaf(selected.getType())) { // 树叶也要搜索
+                if (discoveredBlocks.contains(selected) || searchedLeaves.contains(selected)) { // 已经搜索过
                     continue;
                 }
-                if (selected.a.getType() == targetBlock.getType()) {
-                    discoveredBlocks.add(selected.a);
+                if (selected.getType() == targetBlock.getType()) {
+                    discoveredBlocks.add(selected);
                 } else { // 到这里可以断言这必是树叶
-                    searchedLeaves.add(selected.a);
+                    searchedLeaves.add(selected);
                 }
-                if (selected.b > MAX_SEARCH_DEPTH) {
-                    continue;
-                }
-                blocks.add(new Pair<>(selected.a.getRelative(1, 0, 0), selected.b + 1));
-                blocks.add(new Pair<>(selected.a.getRelative(-1, 0, 0), selected.b + 1));
-                blocks.add(new Pair<>(selected.a.getRelative(0, 0, 1), selected.b + 1));
-                blocks.add(new Pair<>(selected.a.getRelative(0, 0, -1), selected.b + 1));
-                blocks.add(new Pair<>(selected.a.getRelative(0, 1, 0), selected.b + 1));
-                blocks.add(new Pair<>(selected.a.getRelative(0, -1, 0), selected.b + 1));
+                blocks.add(selected.getRelative(1, 0, 0));
+                blocks.add(selected.getRelative(-1, 0, 0));
+                blocks.add(selected.getRelative(0, 0, 1));
+                blocks.add(selected.getRelative(0, 0, -1));
+                blocks.add(selected.getRelative(0, 1, 0));
+                blocks.add(selected.getRelative(0, -1, 0));
             }
         }
         return new LinkedList<>(discoveredBlocks);
