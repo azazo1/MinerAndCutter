@@ -3,6 +3,7 @@ package com.azazo1.minerandcutter;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -16,10 +17,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
 
 public final class MinerAndCutter extends JavaPlugin implements Listener {
     public final DoubleClickChecker doubleClickCheckerOfMiner = new DoubleClickChecker(this);
@@ -74,6 +72,18 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
         put(Material.GOLDEN_AXE, 32);
         put(Material.NETHERITE_AXE, 2031);
     }};
+    public static final HashSet<Material> leafTypes = new HashSet<>() {{
+        add(Material.OAK_LEAVES);
+        add(Material.SPRUCE_LEAVES);
+        add(Material.BIRCH_LEAVES);
+        add(Material.JUNGLE_LEAVES);
+        add(Material.ACACIA_LEAVES);
+        add(Material.DARK_OAK_LEAVES);
+        add(Material.MANGROVE_LEAVES);
+        add(Material.CHERRY_LEAVES);
+        add(Material.FLOWERING_AZALEA_LEAVES);
+    }};
+    private static final int MAX_SEARCH_DEPTH = 50; // 搜索“树木”时最大搜索广度（矿物一般较为少，可不理）
 
     @EventHandler
     public void onPlayerInteract(@NotNull PlayerInteractEvent event) {
@@ -86,16 +96,16 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
             }
             Material type = clickedBlock.getType();
             Material handItem = player.getInventory().getItemInMainHand().getType();
-            if (isInMind(type)) {
-                if (isInPickaxe(handItem) && doubleClickCheckerOfMiner.checkDoubleClick(player)) { // 要在内层 确保玩家拿着镐子双击且双击的是对应方块
+            if (isInMind(type) && isInPickaxe(handItem)) {
+                event.setCancelled(true);
+                if (doubleClickCheckerOfMiner.checkDoubleClick(player)) { // 要在内层 确保玩家拿着镐子双击且双击的是对应方块
                     // 挖矿
-                    event.setCancelled(true);
                     digBlocksInOneTime(clickedBlock, player, pickaxeTypes.get(handItem));
                 }
-            } else if (isInTree(type)) {
-                if (isInAxe(handItem) && doubleClickCheckerOfTree.checkDoubleClick(player)) {
+            } else if (isInTree(type) && isInAxe(handItem)) {
+                event.setCancelled(true);
+                if (doubleClickCheckerOfTree.checkDoubleClick(player)) {
                     // 挖树
-                    event.setCancelled(true);
                     digBlocksInOneTime(clickedBlock, player, axeTypes.get(handItem));
                 }
             }
@@ -111,43 +121,89 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
      * @param maxEndurance 玩家手上采集工具的最大耐久
      */
     private void digBlocksInOneTime(@NotNull Block targetBlock, @NotNull Player player, int maxEndurance) {
-        ItemStack is = player.getInventory().getItemInMainHand();
+        ItemStack itemInMainHand = player.getInventory().getItemInMainHand();
         // 检查该工具是否能挖掘该类方块
-        Collection<ItemStack> drops = targetBlock.getDrops(is);
+        Collection<ItemStack> drops = targetBlock.getDrops(itemInMainHand);
         if (drops.size() == 0) {
             player.sendMessage(Component.text("你的工具等级不足以挖掘该矿物!"));
             return;
         }
-        ArrayList<Block> blocks = searchBlocks(targetBlock, null); // 搜寻相邻同类方块
-        // 检查工具耐久值是否足够
-        Damageable itemMeta = (Damageable) is.getItemMeta();
-        int damage = itemMeta.getDamage();
-        int endurance = maxEndurance - damage;
-        int size = blocks.size();
-        if (endurance < size) {
-            player.sendMessage(Component.text("你所持的工具耐久不足! (需要: %d, 你的工具: %d)".formatted(size, endurance)));
+        LinkedList<Block> blocks; // 搜寻相邻同类方块
+        if (isInMind(targetBlock.getType())) {
+            blocks = searchMine(targetBlock, null);
+        } else if (isInTree(targetBlock.getType())) {
+            blocks = searchTree(targetBlock);
         } else {
-            for (Block discoveredBlock : blocks) {
-                discoveredBlock.breakNaturally(is);
-                Collection<Item> dropItems = player.getWorld().getNearbyEntitiesByType(Item.class, discoveredBlock.getLocation(), 2);
-                dropItems.forEach(item -> {
-                    item.teleport(player);
-                    item.setPickupDelay(0);
-                });
-            }
-            damage += size;
-            itemMeta.setDamage(damage);
-            is.setItemMeta(itemMeta);
-            player.sendMessage(Component.text("挖掘了 %d 个方块, 工具剩余耐久: %d".formatted(size, maxEndurance - damage)));
+            player.sendMessage(Component.text("你正在进行无效的尝试"));
+            return;
         }
+        // 获取背包内同种类同级别工具的总耐久
+        List<ItemStack> sameTypeItems = getItemsOfAPlayer(player, itemStack -> itemStack != null && itemStack.getType() == itemInMainHand.getType());
+        ArrayList<ItemStack> sameTypeItemsArrayList = new ArrayList<>(sameTypeItems);
+        int totalEndurance = sameTypeItemsArrayList.stream().mapToInt(is1 -> {
+            Damageable itemMeta = (Damageable) is1.getItemMeta();
+            int damage = itemMeta.getDamage();
+            return maxEndurance - damage;
+        }).sum();
+        // 检查工具耐久值是否足够
+        int totalNeed = blocks.size();
+        if (totalEndurance < blocks.size()) {
+            player.sendMessage(Component.text("你所拥有的同类工具耐久不足! (需要: %d, 你的背包内同类工具总可用耐久: %d)".formatted(totalNeed, totalEndurance)));
+            return;
+        }
+
+        sameTypeItemsArrayList.remove(itemInMainHand);
+        sameTypeItemsArrayList.add(0, itemInMainHand); // 手上的放到首位
+        for (ItemStack is : sameTypeItemsArrayList) { // 逐个工具尝试挖掘
+            int restNeed = blocks.size(); // 还需要挖掘的方块数量
+            if (restNeed == 0) {
+                break;
+            }
+
+            Damageable itemMeta = (Damageable) is.getItemMeta();
+            int damage = itemMeta.getDamage();
+            int endurance = maxEndurance - damage; // 该工具剩余耐久
+            if (restNeed < endurance) { // 这个工具可承担剩下的挖掘任务
+                while (!blocks.isEmpty()) {
+                    Block discoveredBlock = blocks.pop();
+                    discoveredBlock.breakNaturally(itemInMainHand);
+                    Collection<Item> dropItems = player.getWorld().getNearbyEntitiesByType(Item.class, discoveredBlock.getLocation(), 2);
+                    dropItems.forEach(item -> {
+                        item.teleport(player);
+                        item.setPickupDelay(0);
+                    });
+                }
+                damage += restNeed;
+                itemMeta.setDamage(damage);
+                is.setItemMeta(itemMeta);
+            } else { // 该工具不能独立承担剩下的挖掘任务，该工具被挖破后剩下的同类工具出马
+                for (int i = 0; i < endurance; i++) {
+                    Block discoveredBlock = blocks.pop();
+                    discoveredBlock.breakNaturally(itemInMainHand);
+                    Collection<Item> dropItems = player.getWorld().getNearbyEntitiesByType(Item.class, discoveredBlock.getLocation(), 2);
+                    dropItems.forEach(item -> {
+                        item.teleport(player);
+                        item.setPickupDelay(0);
+                    });
+                }
+                player.getInventory().removeItem(is);
+                player.playSound(player, Sound.ENTITY_ITEM_BREAK, 1, 1);
+            }
+        }
+        player.sendMessage(Component.text("挖掘了 %d 个方块, 背包内同类工具剩余耐久: %d".formatted(totalNeed, totalEndurance - totalNeed)));
+        player.playSound(player, Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1, 1);
+    }
+
+    private List<ItemStack> getItemsOfAPlayer(Player player, ItemStackFilter filter) {
+        return Arrays.stream(player.getInventory().getContents()).filter(filter::filter).toList();
     }
 
     /**
-     * 搜寻与这个方块相邻的所有同类方块
+     * 搜寻与这个方块相邻的所有同类矿物方块
      */
-    private @NotNull ArrayList<Block> searchBlocks(@NotNull Block targetBlock, @Nullable ArrayList<Block> discoveredBlocks) {
+    private @NotNull LinkedList<Block> searchMine(@NotNull Block targetBlock, @Nullable LinkedList<Block> discoveredBlocks) {
         if (discoveredBlocks == null) {
-            discoveredBlocks = new ArrayList<>();
+            discoveredBlocks = new LinkedList<>();
         } else if (discoveredBlocks.contains(targetBlock)) {
             return discoveredBlocks; // 终止搜索
         }
@@ -160,10 +216,54 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
         Block blockNY = targetBlock.getRelative(0, -1, 0);
         for (Block relativeBlock : new Block[]{blockX, blockNX, blockZ, blockNZ, blockY, blockNY}) {
             if (relativeBlock.getType() == targetBlock.getType()) {
-                searchBlocks(relativeBlock, discoveredBlocks);
+                searchMine(relativeBlock, discoveredBlocks);
             }
         }
         return discoveredBlocks;
+    }
+
+    /**
+     * BFS 搜寻一颗树内的所有树木方块
+     */
+    private @NotNull LinkedList<Block> searchTree(@NotNull Block targetBlock) {
+        HashSet<Block> discoveredBlocks = new HashSet<>();// 初始化结果列表
+        HashSet<Block> searchedLeaves = new HashSet<>();
+
+        LinkedList<Pair<Block, Integer>> blocks = new LinkedList<>() {{
+            add(new Pair<>(targetBlock.getRelative(1, 0, 0), 1)); // Pair.b 指的是 搜索深度
+            add(new Pair<>(targetBlock.getRelative(-1, 0, 0), 1));
+            add(new Pair<>(targetBlock.getRelative(0, 0, 1), 1));
+            add(new Pair<>(targetBlock.getRelative(0, 0, -1), 1));
+            add(new Pair<>(targetBlock.getRelative(0, 1, 0), 1));
+            add(new Pair<>(targetBlock.getRelative(0, -1, 0), 1));
+        }};
+
+        discoveredBlocks.add(targetBlock);
+
+        while (blocks.size() > 0) {
+            Pair<Block, Integer> selected = blocks.pop();
+            if (selected.a.getType() == targetBlock.getType() // 与 结果 中的方块类型相同，即判断是否是树木方块
+                    || isInLeaf(selected.a.getType())) { // 树叶也要搜索
+                if (discoveredBlocks.contains(selected.a) || searchedLeaves.contains(selected.a)) { // 已经搜索过
+                    continue;
+                }
+                if (selected.a.getType() == targetBlock.getType()) {
+                    discoveredBlocks.add(selected.a);
+                } else { // 到这里可以断言这必是树叶
+                    searchedLeaves.add(selected.a);
+                }
+                if (selected.b > MAX_SEARCH_DEPTH) {
+                    continue;
+                }
+                blocks.add(new Pair<>(selected.a.getRelative(1, 0, 0), selected.b + 1));
+                blocks.add(new Pair<>(selected.a.getRelative(-1, 0, 0), selected.b + 1));
+                blocks.add(new Pair<>(selected.a.getRelative(0, 0, 1), selected.b + 1));
+                blocks.add(new Pair<>(selected.a.getRelative(0, 0, -1), selected.b + 1));
+                blocks.add(new Pair<>(selected.a.getRelative(0, 1, 0), selected.b + 1));
+                blocks.add(new Pair<>(selected.a.getRelative(0, -1, 0), selected.b + 1));
+            }
+        }
+        return new LinkedList<>(discoveredBlocks);
     }
 
     /**
@@ -195,6 +295,13 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
         return axeTypes.containsKey(material);
     }
 
+    /**
+     * 查询某个方块是否是树叶
+     */
+    private boolean isInLeaf(Material material) {
+        return leafTypes.contains(material);
+    }
+
     @Override
     public void onEnable() {
         // Plugin startup logic
@@ -204,5 +311,9 @@ public final class MinerAndCutter extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         // Plugin shutdown logic
+    }
+
+    public interface ItemStackFilter {
+        boolean filter(ItemStack is);
     }
 }
